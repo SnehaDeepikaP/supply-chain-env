@@ -297,6 +297,7 @@ def run_task(task_id: str, seed: int = 42) -> dict:
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    """
     all_results = []
 
     for task_cfg in TASKS:
@@ -312,4 +313,36 @@ if __name__ == "__main__":
     for r in all_results:
         print(f"  {r['task_id']}: score={r['score']:.4f} success={r['success']}", flush=True)
     print(f"  overall_score={overall:.4f}", flush=True)
+    """
+    def run_inference() -> list:
+    """
+    Run all tasks and return the output that would normally be printed to stdout.
+    """
+    from io import StringIO
+    import sys
+
+    # Capture stdout
+    old_stdout = sys.stdout
+    sys.stdout = mystdout = StringIO()
+
+    all_results = []
+
+    for task_cfg in TASKS:
+        result = run_task(task_id=task_cfg["task_id"], seed=task_cfg["seed"])
+        all_results.append(result)
+        time.sleep(1)
+
+    # Print summary to captured stdout
+    scores = [r["score"] for r in all_results]
+    overall = sum(scores) / len(scores) if scores else 0.0
+
+    print("\n=== SUMMARY ===", flush=True)
+    for r in all_results:
+        print(f"  {r['task_id']}: score={r['score']:.4f} success={r['success']}", flush=True)
+    print(f"  overall_score={overall:.4f}", flush=True)
+
+    # Restore stdout
+    sys.stdout = old_stdout
+
+    return mystdout.getvalue().splitlines()  # return output as list of lines
     
