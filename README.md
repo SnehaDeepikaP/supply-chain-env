@@ -1,3 +1,11 @@
+---
+title: Supply Chain Env
+sdk: docker
+emoji: 🏢
+colorFrom: yellow
+colorTo: blue
+pinned: false
+---
 # Supply Chain Disruption Manager
 
 **OpenEnv RL Environment — Meta OpenEnv Hackathon**
@@ -299,4 +307,7 @@ supply-chain-env/
 │   └── task3_cascade_disruption.py Hard (21 days)
 └── graders/
     └── __init__.py                 Grading functions
+    └── supplier_grader.py
+    └── logistics_grader.py
+    └── cascade_grader.py 
 ```
