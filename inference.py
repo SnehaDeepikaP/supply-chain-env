@@ -345,4 +345,3 @@ if __name__ == "__main__":
     sys.stdout = old_stdout
 
     return mystdout.getvalue().splitlines()  # return output as list of lines
-    
