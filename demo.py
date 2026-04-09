@@ -1,23 +1,29 @@
+import threading
 import gradio as gr
+import requests
 import subprocess
 
-def run_demo():
-    result = subprocess.run(
-        ["python", "inference.py"],
-        capture_output=True,
-        text=True
-    )
-    return result.stdout
+# Start FastAPI server in background
+def start_api():
+    subprocess.Popen(["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"])
 
-with gr.Blocks() as demo:
-    gr.Markdown("# 🚚 Supply Chain OpenEnv Demo")
+threading.Thread(target=start_api, daemon=True).start()
 
-    gr.Markdown("Click below to run an OpenEnv task")
+# Wait a few seconds for API to start
+import time
+time.sleep(3)
 
-    btn = gr.Button("Run Task")
+# Example Gradio interface
+def reset_task(task_id):
+    r = requests.post("http://localhost:7860/reset", json={"task_id": task_id})
+    return r.json()
 
-    output = gr.Textbox(label="Execution Logs", lines=20)
+iface = gr.Interface(
+    fn=reset_task,
+    inputs=gr.Dropdown(["supplier_triage", "logistics_reroute", "cascade_disruption"]),
+    outputs="json",
+    title="Supply Chain Disruption Manager",
+    description="Interact with your OpenEnv environment"
+)
 
-    btn.click(fn=run_demo, inputs=[], outputs=output)
-
-demo.launch(server_name="0.0.0.0", server_port=7861)
+iface.launch(server_name="0.0.0.0", server_port=7860)
