@@ -1,0 +1,17 @@
+[project]
+name = "supply-chain-env"
+version = "0.1.0"
+description = "Supply Chain Disruption Manager OpenEnv"
+authors = [{ name = "Your Name" }]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic"
+]
+
+[tool.setuptools]
+py-modules = ["app"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
