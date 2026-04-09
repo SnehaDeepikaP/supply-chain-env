@@ -2,13 +2,15 @@
 name = "supply-chain-env"
 version = "0.1.0"
 description = "Supply Chain Disruption Manager OpenEnv"
-authors = [{ name = "Your Name" }]
+authors = [{ name = "Parimisetty Sneha Deepika" }]
 dependencies = [
     "fastapi",
     "uvicorn",
-    "pydantic"
+    "pydantic",
+    "openenv-core>=0.2.0"
 ]
-
+[project.scripts]
+server = "server.app:main"
 [tool.setuptools]
 py-modules = ["app"]
 
