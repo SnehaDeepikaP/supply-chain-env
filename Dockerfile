@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY models.py .
 COPY env.py .
 COPY app.py .
+COPY demo.py . 
 COPY inference.py .
 COPY openenv.yaml .
 
