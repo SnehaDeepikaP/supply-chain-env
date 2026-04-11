@@ -86,17 +86,21 @@ def list_tasks():
 
 
 @app.post("/reset", response_model=ResetResponse, tags=["openenv"])
-def reset(request: ResetRequest):
-    """
-    Initialize a new episode.
-
-    - **task_id**: 'supplier_triage' | 'logistics_reroute' | 'cascade_disruption'
-    - **seed**: integer seed for reproducibility
-    """
+def reset(request: Optional[ResetRequest] = None):
     try:
-        obs = env.reset(task_id=request.task_id, seed=request.seed)
-        task_info = env.list_tasks().get(request.task_id, {})
+        if request is None:
+            # Default behavior (required for OpenEnv)
+            task_id = "supplier_triage"
+            seed = 42
+        else:
+            task_id = request.task_id
+            seed = request.seed
+
+        obs = env.reset(task_id=task_id, seed=seed)
+        task_info = env.list_tasks().get(task_id, {})
+
         return ResetResponse(observation=obs, task_info=task_info)
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
