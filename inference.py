@@ -2,15 +2,15 @@ import json
 import os
 import time
 import requests
+from openai import OpenAI
 
-# ─── ENV VARS ─────────────────────────────────────────────
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-HF_TOKEN = os.getenv("HF_TOKEN")
+# ─── ENV ─────────────────────────────────────────────────
+API_BASE_URL = os.environ.get("API_BASE_URL")
+API_KEY = os.environ.get("API_KEY")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4.1-mini")
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860")
 
-if not HF_TOKEN:
-    print("Warning: HF_TOKEN not found. Running in fallback mode.")
+client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 TASKS = [
     {"task_id": "supplier_triage", "seed": 42},
@@ -22,7 +22,7 @@ ENV_NAME = "supply_chain_disruption_manager"
 MAX_STEPS = 30
 
 
-# ─── SAFE ENV CHECK ───────────────────────────────────────
+# ─── SAFE ENV ─────────────────────────────────────────────
 def wait_for_env():
     for _ in range(5):
         try:
@@ -35,38 +35,24 @@ def wait_for_env():
     return False
 
 
-# ─── SAFE ENV FUNCTIONS ───────────────────────────────────
-def env_reset(task_id, seed=42):
+def env_reset(task_id, seed):
     try:
-        r = requests.post(
-            f"{ENV_BASE_URL}/reset",
-            json={"task_id": task_id, "seed": seed},
-            timeout=10,
-        )
+        r = requests.post(f"{ENV_BASE_URL}/reset", json={"task_id": task_id, "seed": seed}, timeout=10)
         r.raise_for_status()
         return r.json()
     except Exception as e:
-        print("RESET ERROR:", str(e))
+        print("RESET ERROR:", e)
         return {"error": str(e)}
 
 
 def env_step(action):
     try:
-        r = requests.post(
-            f"{ENV_BASE_URL}/step",
-            json={"action": action},
-            timeout=10,
-        )
+        r = requests.post(f"{ENV_BASE_URL}/step", json={"action": action}, timeout=10)
         r.raise_for_status()
         return r.json()
     except Exception as e:
-        print("STEP ERROR:", str(e))
-        return {
-            "reward": {"value": 0.0},
-            "done": True,
-            "observation": {},
-            "error": str(e),
-        }
+        print("STEP ERROR:", e)
+        return {"reward": {"value": 0.0}, "done": True, "observation": {}, "error": str(e)}
 
 
 def env_grade():
@@ -74,90 +60,72 @@ def env_grade():
         r = requests.get(f"{ENV_BASE_URL}/grade", timeout=10)
         r.raise_for_status()
         return r.json().get("score", 0.0)
-    except Exception as e:
-        print("GRADE ERROR:", str(e))
+    except:
         return 0.0
 
 
-# ─── AGENT LOGIC (SAFE RULE-BASED) ───────────────────────
+# ─── LLM + FALLBACK ──────────────────────────────────────
+def fallback_logic(obs):
+    return {"action_type": "wait"}
+
+
 def call_llm(obs):
     try:
-        task_id = obs.get("task_id", "")
+        prompt = f"""
+        You are a supply chain optimizer.
 
-        # Supplier triage
-        if task_id == "supplier_triage":
-            suppliers = obs.get("suppliers", [])
-            warehouses = obs.get("warehouses", [])
+        Observation:
+        {json.dumps(obs)[:2000]}
 
-            for supplier in sorted(
-                suppliers,
-                key=lambda s: (s.get("capacity_available", 0), s.get("reliability_score", 0)),
-                reverse=True,
-            ):
-                if not supplier.get("disruption_active") and supplier.get("capacity_available", 0) > 0:
-                    return {
-                        "action_type": "activate_supplier",
-                        "activate_supplier": {
-                            "supplier_id": supplier["supplier_id"],
-                            "order_quantity": 500,
-                            "destination_warehouse": warehouses[0]["warehouse_id"] if warehouses else "WH-DEFAULT",
-                        },
-                    }
+        Decide next best action.
+        Return ONLY JSON with action_type and parameters.
+        """
 
-        # Logistics reroute
-        elif task_id == "logistics_reroute":
-            for shipment in obs.get("active_shipments", []):
-                if shipment.get("status") in ["blocked", "delayed"]:
-                    return {
-                        "action_type": "reroute_shipment",
-                        "reroute_shipment": {
-                            "shipment_id": shipment["shipment_id"],
-                            "new_route": "air_freight",
-                            "expedite": True,
-                        },
-                    }
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": "You are a supply chain optimizer."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=200,
+        )
 
-        # Cascade disruption
-        elif task_id == "cascade_disruption":
-            day = obs.get("days_elapsed", 0)
+        text = response.choices[0].message.content.strip()
 
-            if day == 0:
-                return {"action_type": "allocate_stock", "allocate_stock": {"source_warehouse": "WH-SECONDARY-C", "destination_warehouse": "WH-CRITICAL-B", "quantity": 2000}}
-            elif day == 1:
-                return {"action_type": "allocate_stock", "allocate_stock": {"source_warehouse": "WH-SECONDARY-D", "destination_warehouse": "WH-CRITICAL-A", "quantity": 1800}}
-            elif day == 2:
-                return {"action_type": "negotiate_contract", "negotiate_contract": {"supplier_id": "SUP-X4", "contract_type": "long_term", "max_price_per_unit": 40.0}}
-            elif day == 3:
-                return {"action_type": "activate_supplier", "activate_supplier": {"supplier_id": "SUP-X4", "order_quantity": 3450, "destination_warehouse": "WH-CRITICAL-A"}}
+        try:
+            action = json.loads(text)
+            if "action_type" in action:
+                return action
+        except:
+            pass
 
-        return {"action_type": "wait"}
+        return fallback_logic(obs)
 
     except Exception as e:
-        print("LLM ERROR:", str(e))
-        return {"action_type": "wait"}
+        print("LLM ERROR:", e)
+        return fallback_logic(obs)
 
 
 # ─── RUN TASK ─────────────────────────────────────────────
-def run_task(task_id, seed=42):
+def run_task(task_id, seed):
     step_rewards = []
     steps = 0
     done = False
 
+    print(f"[START] task={task_id} env={ENV_NAME} model={MODEL_NAME}")
+
     if not wait_for_env():
-        print("[START] task={} env={} model={}".format(task_id, ENV_NAME, MODEL_NAME))
-        print("[END] success=false steps=0 score=0.0000 rewards=0.00")
-        return
+        print(f"[END] success=false steps=0 score=0.0000 rewards=0.00")
+        return {"task_id": task_id, "score": 0.0, "success": False}
 
     reset_data = env_reset(task_id, seed)
 
     if "observation" not in reset_data:
-        print("[START] task={} env={} model={}".format(task_id, ENV_NAME, MODEL_NAME))
-        print("[END] success=false steps=0 score=0.0000 rewards=0.00")
-        return
+        print(f"[END] success=false steps=0 score=0.0000 rewards=0.00")
+        return {"task_id": task_id, "score": 0.0, "success": False}
 
     obs = reset_data["observation"]
-
-    print(f"[START] task={task_id} env={ENV_NAME} model={MODEL_NAME}")
 
     try:
         while not done and steps < MAX_STEPS:
@@ -176,7 +144,8 @@ def run_task(task_id, seed=42):
 
             print(
                 f"[STEP] step={steps} action={action_str} "
-                f"reward={reward:.2f} done={str(done).lower()} error={error if error else 'null'}"
+                f"reward={reward:.2f} done={str(done).lower()} "
+                f"error={error if error else 'null'}"
             )
 
         score = env_grade()
@@ -187,15 +156,37 @@ def run_task(task_id, seed=42):
             f"steps={steps} score={score:.4f} rewards={rewards_str}"
         )
 
+        return {
+            "task_id": task_id,
+            "score": score,
+            "success": score >= 0.5
+        }
+
     except Exception as e:
         print(f"[END] success=false steps={steps} score=0.0000 rewards=0.00")
+        return {"task_id": task_id, "score": 0.0, "success": False}
 
 
 # ─── MAIN ─────────────────────────────────────────────────
 if __name__ == "__main__":
     try:
+        results = []
+
         for task in TASKS:
-            run_task(task["task_id"], task["seed"])
+            res = run_task(task["task_id"], task["seed"])
+            results.append(res)
             time.sleep(1)
+
+        # SUMMARY
+        print("\n=== SUMMARY ===")
+        scores = []
+
+        for r in results:
+            print(f"{r['task_id']}: score={r['score']:.4f} success={r['success']}")
+            scores.append(r["score"])
+
+        overall = sum(scores) / len(scores) if scores else 0.0
+        print(f"overall_score={overall:.4f}")
+
     except Exception as e:
-        print("FATAL ERROR:", str(e))
+        print("FATAL ERROR:", e)
