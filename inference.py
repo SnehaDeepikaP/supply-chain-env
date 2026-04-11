@@ -30,7 +30,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860")
 
 if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
+    print("Warning: HF_TOKEN not found. Running in limited mode.")
 
 # ─── OpenAI client ───────────────────────────────────────────────────────────
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
