@@ -1,11 +1,3 @@
----
-title: Supply Chain Env
-sdk: docker
-emoji: 🏢
-colorFrom: yellow
-colorTo: blue
-pinned: false
----
 # Supply Chain Disruption Manager
 
 **OpenEnv RL Environment — Meta OpenEnv Hackathon**
